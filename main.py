@@ -1,71 +1,71 @@
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-import models, schemas
-from database import SessionLocal, engine
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import List
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import sessionmaker, declarative_base
+import os
 
-models.Base.metadata.create_all(bind=engine)
+# ⚙️ Cargar URL de la base de datos desde Render
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://usuario:contraseña@localhost/db")
 
+# 🔌 Conexión a la base de datos
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# 🧱 Modelo SQLAlchemy
+class IngredientModel(Base):
+    __tablename__ = "ingredients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    quantity = Column(Integer)
+
+# 🛠️ Crear tablas
+Base.metadata.create_all(bind=engine)
+
+# 📦 Esquema de entrada/salida con Pydantic
+class Ingredient(BaseModel):
+    name: str
+    quantity: int
+
+class StockUpdate(BaseModel):
+    updates: List[Ingredient] = Field(...)
+
+# 🚀 Instancia de FastAPI
 app = FastAPI()
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ✅ Ruta principal
+@app.get("/")
+def read_root():
+    return {"message": "API en funcionamiento"}
 
-# Dependency
-def get_db():
+# 📥 Obtener ingredientes desde DB
+@app.get("/ingredients", response_model=List[Ingredient])
+def get_ingredients():
     db = SessionLocal()
     try:
-        yield db
+        ingredients = db.query(IngredientModel).all()
+        return [Ingredient(name=i.name, quantity=i.quantity) for i in ingredients]
     finally:
         db.close()
 
-@app.get("/")
-def root():
-    return {"message": "API de Ingredientes funcionando. Visita /docs"}
-
-@app.get("/ingredients", response_model=list[schemas.Ingredient])
-def get_ingredients(db: Session = Depends(get_db)):
-    return db.query(models.Ingredient).all()
-
-@app.post("/ingredients", response_model=schemas.Ingredient)
-def create_ingredient(ingredient: schemas.IngredientCreate, db: Session = Depends(get_db)):
-    db_ingredient = models.Ingredient(**ingredient.dict())
-    db.add(db_ingredient)
-    db.commit()
-    db.refresh(db_ingredient)
-    return db_ingredient
-
-@app.post("/ingredients/update", response_model=schemas.StockMovement)
-def update_ingredient_stock(update: schemas.StockUpdate, db: Session = Depends(get_db)):
-    ingredient = db.query(models.Ingredient).filter(models.Ingredient.id == update.ingredientId).first()
-    if not ingredient:
-        raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
-
-    previous_quantity = ingredient.quantity
-    new_quantity = previous_quantity + update.quantity
-
-    if new_quantity < 0:
-        raise HTTPException(status_code=400, detail="El stock no puede quedar negativo")
-
-    ingredient.quantity = new_quantity
-    db.commit()
-
-    movement = models.StockMovement(
-        ingredientId=update.ingredientId,
-        type="manual_add" if update.quantity > 0 else "manual_subtract",
-        quantity=update.quantity,
-        previousQuantity=previous_quantity,
-        newQuantity=new_quantity,
-        reason=update.reason,
-        userId=update.userId,
-    )
-    db.add(movement)
-    db.commit()
-    db.refresh(movement)
-    return movement
+# 🔄 Actualizar ingredientes
+@app.post("/ingredients/update")
+def update_ingredients(stock_update: StockUpdate):
+    db = SessionLocal()
+    try:
+        for item in stock_update.updates:
+            ingredient = db.query(IngredientModel).filter_by(name=item.name).first()
+            if ingredient:
+                ingredient.quantity += item.quantity
+            else:
+                new_ingredient = IngredientModel(name=item.name, quantity=item.quantity)
+                db.add(new_ingredient)
+        db.commit()
+        return {"message": "Ingredientes actualizados exitosamente"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar: {str(e)}")
+    finally:
+        db.close()
