@@ -2,6 +2,7 @@ from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+import uuid
 
 class Ingredient(Base):
     __tablename__ = "ingredients"
@@ -14,7 +15,7 @@ class Ingredient(Base):
 
 class StockMovement(Base):
     __tablename__ = "stock_movements"
-    id = Column(String, primary_key=True, index=True, default=lambda: str(int(func.random()*1e10)))
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     ingredientId = Column(String, ForeignKey("ingredients.id"))
     type = Column(String)
     quantity = Column(Float)
