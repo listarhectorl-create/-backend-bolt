@@ -39,7 +39,7 @@ def get_ingredients(db: Session = Depends(get_db)):
 
 # Crear un nuevo ingrediente
 @app.post("/ingredients", response_model=schemas.Ingredient)
-def create_ingredient(ingredient: schemas.Ingredient, db: Session = Depends(get_db)):
+def create_ingredient(ingredient: schemas.IngredientCreate, db: Session = Depends(get_db)):
     existing = db.query(models.Ingredient).filter(models.Ingredient.id == ingredient.id).first()
     if existing:
         raise HTTPException(status_code=400, detail="El ingrediente ya existe")
