@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from datetime import datetime
 
-class Ingredient(BaseModel):
+# Esquema para crear un ingrediente (sin el id obligatorio)
+class IngredientCreate(BaseModel):
     id: str
     name: str
     unit: str
@@ -9,9 +10,12 @@ class Ingredient(BaseModel):
     minStock: float
     cost: float
 
+# Esquema para respuesta de ingrediente (con orm_mode)
+class Ingredient(IngredientCreate):
     class Config:
         orm_mode = True
 
+# Movimiento de stock (respuesta)
 class StockMovement(BaseModel):
     id: str
     ingredientId: str
@@ -26,6 +30,7 @@ class StockMovement(BaseModel):
     class Config:
         orm_mode = True
 
+# Entrada para actualizar stock
 class StockUpdate(BaseModel):
     ingredientId: str
     quantity: float
